@@ -33,6 +33,35 @@
   @media (max-width:860px){ .featured-grid{grid-template-columns:1fr;} }
 
   .gallery-section{background:var(--bg-panel); border-top:1px solid var(--hairline); border-bottom:1px solid var(--hairline);}
+
+  /* Atölyeden fotoğraflar */
+  .workshop-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:2px; background:var(--hairline);}
+  .workshop-tile{position:relative; aspect-ratio:4/5; overflow:hidden; background:var(--bg-panel); cursor:pointer;}
+  .workshop-tile img{width:100%; height:100%; object-fit:cover; display:block; transition:transform .5s;}
+  .workshop-tile:hover img{transform:scale(1.05);}
+  .workshop-tile .cap{position:absolute; left:0; right:0; bottom:0; padding:14px 16px; background:linear-gradient(to top, rgba(20,18,15,0.85), transparent); font-family:'Space Mono', monospace; font-size:11px; color:var(--ink-dim); opacity:0; transition:opacity .2s;}
+  .workshop-tile:hover .cap{opacity:1;}
+  @media (max-width:860px){ .workshop-grid{grid-template-columns:1fr 1fr;} }
+
+  /* Video galerisi */
+  .video-section{background:var(--bg); border-bottom:1px solid var(--hairline);}
+  .video-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:16px;}
+  .video-card{border-radius:4px; overflow:hidden; background:var(--bg-panel); border:1px solid var(--hairline);}
+  .video-card video{width:100%; aspect-ratio:9/16; object-fit:cover; display:block; background:#000;}
+  .video-card .v-title{padding:12px 14px; font-family:'Space Grotesk', sans-serif; font-size:13px; font-weight:500; color:var(--ink);}
+  @media (max-width:860px){ .video-grid{grid-template-columns:1fr 1fr;} }
+  @media (max-width:520px){ .video-grid{grid-template-columns:1fr;} }
+
+  /* Lightbox (ürün görsellerine yakından bakış) */
+  .lightbox{position:fixed; inset:0; z-index:200; background:rgba(10,9,7,0.96); display:none; align-items:center; justify-content:center; padding:40px;}
+  .lightbox.active{display:flex;}
+  .lightbox img{max-width:90vw; max-height:82vh; object-fit:contain; box-shadow:0 30px 80px rgba(0,0,0,0.5);}
+  .lightbox-close{position:absolute; top:24px; right:32px; font-family:'Space Mono', monospace; font-size:13px; letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-dim); background:none; border:1px solid var(--hairline-strong); padding:10px 18px; cursor:pointer;}
+  .lightbox-close:hover{color:var(--ink); border-color:var(--brass-light);}
+  .lightbox-nav{position:absolute; top:50%; transform:translateY(-50%); background:none; border:1px solid var(--hairline-strong); color:var(--ink-dim); width:48px; height:48px; border-radius:50%; cursor:pointer; font-size:18px;}
+  .lightbox-nav:hover{color:var(--brass-light); border-color:var(--brass-light);}
+  .lightbox-prev{left:24px;} .lightbox-next{right:24px;}
+  .lightbox-count{position:absolute; bottom:24px; left:50%; transform:translateX(-50%); font-family:'Space Mono', monospace; font-size:12px; color:var(--ink-dim); letter-spacing:0.06em;}
   .carousel{position:relative; border:1px solid var(--hairline); background:var(--bg); min-height:440px;}
   .carousel-track{position:relative; min-height:440px;}
   .c-slide{position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; opacity:0; transition:opacity .7s ease; pointer-events:none;}
@@ -184,6 +213,27 @@
   </div>
 </section>
 
+<section id="atolye">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Atölye</span>
+      <h2 id="workshopHeading">Atölyeden</h2>
+      <p id="workshopSub" style="margin-top:12px; color:var(--ink-dim); font-size:15px;"></p>
+    </div>
+    <div class="workshop-grid" id="workshopGrid"></div>
+  </div>
+</section>
+
+<section class="video-section">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Video</span>
+      <h2>Süreçten kareler</h2>
+    </div>
+    <div class="video-grid" id="videoGrid"></div>
+  </div>
+</section>
+
 <section class="contact" id="iletisim">
   <div class="wrap contact-inner">
     <div>
@@ -215,6 +265,8 @@ async function loadSiteContent(){
   data.forEach(r => map[r.key] = r.value);
 
   if (map.hero_tagline) document.getElementById('heroTagline').innerHTML = escapeHtml(map.hero_tagline);
+  if (map.workshop_heading) document.getElementById('workshopHeading').textContent = map.workshop_heading;
+  if (map.workshop_sub) document.getElementById('workshopSub').textContent = map.workshop_sub;
 
   const mBody = document.getElementById('manifestoBody');
   mBody.innerHTML =
@@ -354,11 +406,73 @@ function restartTimer(){
   }
 }
 
+async function loadWorkshopPhotos(){
+  const grid = document.getElementById('workshopGrid');
+  const section = document.getElementById('atolye');
+  const { data, error } = await sb.from('suad_workshop_photos').select('*').order('sort_order');
+  if (error || !data || data.length === 0) { section.style.display = 'none'; return; }
+  grid.innerHTML = data.map((p, i) => {
+    const img = publicImageUrl(p.image_url);
+    return '<div class="workshop-tile" onclick="openLightbox('+JSON.stringify(data.map(d=>publicImageUrl(d.image_url)))+', '+i+')">'+
+      '<img src="'+img+'" alt="'+escapeHtml(p.caption||'Atölye')+'" loading="lazy">'+
+      (p.caption ? '<div class="cap">'+escapeHtml(p.caption)+'</div>' : '')+
+      '</div>';
+  }).join('');
+}
+
+async function loadVideos(){
+  const grid = document.getElementById('videoGrid');
+  const section = document.querySelector('.video-section');
+  const { data, error } = await sb.from('suad_videos').select('*').order('sort_order');
+  if (error || !data || data.length === 0) { section.style.display = 'none'; return; }
+  grid.innerHTML = data.map(v => {
+    const vurl = publicVideoUrl(v.video_url);
+    const thumb = publicImageUrl(v.thumbnail_url);
+    const mime = videoMimeType(v.video_url);
+    return '<div class="video-card">'+
+      '<video controls preload="metadata"'+(thumb ? ' poster="'+thumb+'"' : '')+'><source src="'+vurl+'"'+(mime ? ' type="'+mime+'"' : '')+'>Tarayıcınız bu video formatını desteklemiyor.</video>'+
+      (v.title ? '<div class="v-title">'+escapeHtml(v.title)+'</div>' : '')+
+      '</div>';
+  }).join('');
+}
+
+// ---- Lightbox (yakından görünüm) ----
+let lbImages = [], lbIndex = 0;
+function openLightbox(images, startIndex){
+  lbImages = images.filter(Boolean);
+  lbIndex = startIndex || 0;
+  renderLightbox();
+  document.getElementById('lightbox').classList.add('active');
+}
+function closeLightbox(){ document.getElementById('lightbox').classList.remove('active'); }
+function lbNav(dir){ lbIndex = (lbIndex + dir + lbImages.length) % lbImages.length; renderLightbox(); }
+function renderLightbox(){
+  document.getElementById('lightboxImg').src = lbImages[lbIndex];
+  document.getElementById('lightboxCount').textContent = (lbIndex+1) + ' / ' + lbImages.length;
+  document.querySelectorAll('.lightbox-nav').forEach(b => b.style.display = lbImages.length > 1 ? 'flex' : 'none');
+}
+document.addEventListener('keydown', (e) => {
+  if (!document.getElementById('lightbox').classList.contains('active')) return;
+  if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'ArrowLeft') lbNav(-1);
+  if (e.key === 'ArrowRight') lbNav(1);
+});
+
 loadSiteContent();
 loadCategories();
 loadFeatured();
 loadGallery();
+loadWorkshopPhotos();
+loadVideos();
 </script>
+
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" onclick="closeLightbox()">Kapat ✕</button>
+  <button class="lightbox-nav lightbox-prev" onclick="lbNav(-1)" style="display:flex;align-items:center;justify-content:center;">←</button>
+  <img id="lightboxImg" src="" alt="Yakından görünüm">
+  <button class="lightbox-nav lightbox-next" onclick="lbNav(1)" style="display:flex;align-items:center;justify-content:center;">→</button>
+  <span class="lightbox-count" id="lightboxCount"></span>
+</div>
 
 </body>
 </html>
