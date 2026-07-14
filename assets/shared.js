@@ -20,6 +20,19 @@ function publicImageUrl(path) {
   return data.publicUrl;
 }
 
+function publicVideoUrl(path) {
+  if (!path) return null;
+  if (path.startsWith("http")) return path;
+  const { data } = sb.storage.from("suad-videos").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function videoMimeType(url) {
+  const ext = (url.split('.').pop() || '').toLowerCase().split('?')[0];
+  const map = { mp4:'video/mp4', mov:'video/quicktime', webm:'video/webm', ogg:'video/ogg', m4v:'video/mp4' };
+  return map[ext] || '';
+}
+
 // Kategori ikonları (örnek görsel yoksa yedek olarak kullanılır)
 const CATEGORY_ICONS = {
   "avize": '<svg viewBox="0 0 60 60"><circle cx="30" cy="10" r="3"/><line x1="30" y1="13" x2="30" y2="24"/><line x1="30" y1="24" x2="10" y2="50"/><line x1="30" y1="24" x2="50" y2="50"/><line x1="30" y1="24" x2="30" y2="54"/><circle cx="10" cy="52" r="2.4"/><circle cx="50" cy="52" r="2.4"/><circle cx="30" cy="56" r="2.4"/></svg>',
