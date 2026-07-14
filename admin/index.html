@@ -85,6 +85,8 @@
     <button class="tab-btn active" data-tab="metinler">Site Metinleri</button>
     <button class="tab-btn" data-tab="kategoriler">Kategoriler</button>
     <button class="tab-btn" data-tab="urunler">Ürünler</button>
+    <button class="tab-btn" data-tab="videolar">Videolar</button>
+    <button class="tab-btn" data-tab="atolye">Atölye Fotoğrafları</button>
   </div>
 
   <div class="panel active" id="panel-metinler">
@@ -132,7 +134,8 @@
         <label style="margin:0;">Ana sayfada "Öne Çıkanlar" büyük görsel alanında göster</label>
       </div>
       <div class="field"><label>Açıklama</label><textarea id="prodDesc" placeholder="Ürün açıklaması"></textarea></div>
-      <div class="field"><label>Ürün Görseli</label><input type="file" id="prodImage" accept="image/*"></div>
+      <div class="field"><label>Ana Görsel (kart ve galeri için)</label><input type="file" id="prodImage" accept="image/*"></div>
+      <div class="field"><label>Ek Görseller — Yakından Görünüm İçin (birden fazla seçebilirsin)</label><input type="file" id="prodExtraImages" accept="image/*" multiple></div>
       <div class="field">
         <label>Ek Özel Alanlar (istediğin kadar ekleyebilirsin)</label>
         <div id="customFieldsList" style="display:flex; flex-direction:column; gap:8px; margin-top:4px;"></div>
@@ -141,6 +144,29 @@
       <button class="btn btn-solid" id="saveProdBtn" style="margin-top:8px;">Kaydet</button>
       <button class="btn btn-line" id="cancelProdBtn" style="display:none;">İptal</button>
       <div class="msg" id="prodMsg"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-videolar">
+    <div class="row-list" id="videoList"></div>
+    <div class="card">
+      <h2>Yeni Video Ekle</h2>
+      <div class="field"><label>Video Başlığı</label><input type="text" id="videoTitle" placeholder="örn. Atölye Süreci"></div>
+      <div class="field"><label>Video Dosyası (mp4 önerilir, max 200MB)</label><input type="file" id="videoFile" accept="video/*"></div>
+      <div class="field"><label>Kapak Görseli (opsiyonel)</label><input type="file" id="videoThumb" accept="image/*"></div>
+      <button class="btn btn-solid" id="saveVideoBtn">Kaydet</button>
+      <div class="msg" id="videoMsg"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-atolye">
+    <div class="row-list" id="workshopList"></div>
+    <div class="card">
+      <h2>Yeni Atölye Fotoğrafı Ekle</h2>
+      <div class="field"><label>Görsel</label><input type="file" id="workshopImage" accept="image/*"></div>
+      <div class="field"><label>Açıklama (opsiyonel)</label><input type="text" id="workshopCaption" placeholder="örn. Kalemkâri işleme anı"></div>
+      <button class="btn btn-solid" id="saveWorkshopBtn">Kaydet</button>
+      <div class="msg" id="workshopMsg"></div>
     </div>
   </div>
 </main>
@@ -166,7 +192,7 @@ function showLogin(){ loginScreen.style.display='block'; dashboard.style.display
 function showDashboard(session){
   loginScreen.style.display='none'; dashboard.style.display='block'; logoutWrap.style.display='block';
   document.getElementById('whoAmI').textContent = session.user.email + ' olarak giriş yapıldı';
-  loadContent(); loadCategories(); loadProducts();
+  loadContent(); loadCategories(); loadProducts(); loadVideos(); loadWorkshopPhotos();
 }
 
 document.getElementById('loginBtn').onclick = async () => {
@@ -347,6 +373,7 @@ function clearCustomFieldsForm(){
 
 // ---------- ÜRÜNLER ----------
 let editingProdId = null;
+let currentEditingExtraImages = [];
 async function loadProducts(){
   const { data } = await sb.from('suad_products').select('*, suad_categories(name)').order('sort_order');
   const list = document.getElementById('productList');
@@ -377,6 +404,7 @@ function editProduct(p){
   document.getElementById('prodDesc').value = p.description || '';
   clearCustomFieldsForm();
   (Array.isArray(p.custom_fields) ? p.custom_fields : []).forEach(f => addCustomFieldRow(f.label, f.value));
+  currentEditingExtraImages = Array.isArray(p.images) ? p.images : [];
   document.getElementById('cancelProdBtn').style.display = 'inline-flex';
 }
 document.getElementById('cancelProdBtn').onclick = () => resetProdForm();
@@ -386,6 +414,8 @@ function resetProdForm(){
   ['prodId','prodTitle','prodSlug','prodMaterial','prodTechnique','prodDesc'].forEach(id => document.getElementById(id).value='');
   document.getElementById('prodFeatured').checked = false;
   document.getElementById('prodImage').value = '';
+  document.getElementById('prodExtraImages').value = '';
+  currentEditingExtraImages = [];
   clearCustomFieldsForm();
   document.getElementById('cancelProdBtn').style.display = 'none';
 }
@@ -413,6 +443,21 @@ document.getElementById('saveProdBtn').onclick = async () => {
     image_url = path;
   }
 
+  const extraFiles = Array.from(document.getElementById('prodExtraImages').files || []);
+  let images = undefined;
+  if (extraFiles.length > 0) {
+    msg.textContent = 'Ek görseller yükleniyor…'; msg.className='msg';
+    const uploaded = [];
+    for (const ef of extraFiles) {
+      const epath = 'products/' + slug + '-extra-' + Date.now() + '-' + Math.random().toString(36).slice(2,7) + '.' + ef.name.split('.').pop();
+      const { error: eErr } = await sb.storage.from('suad-images').upload(epath, ef);
+      if (!eErr) uploaded.push(epath);
+    }
+    // duzenleme modunda mevcut ek gorsellere ekle, yeni urunde sifirdan olustur
+    const existing = (editingProdId && currentEditingExtraImages) ? currentEditingExtraImages : [];
+    images = [...existing, ...uploaded];
+  }
+
   const payload = {
     title, slug,
     category_id: document.getElementById('prodCategory').value || null,
@@ -423,6 +468,7 @@ document.getElementById('saveProdBtn').onclick = async () => {
     custom_fields: getCustomFieldsFromForm()
   };
   if (image_url) payload.image_url = image_url;
+  if (images) payload.images = images;
 
   let error;
   if (editingProdId) {
@@ -434,6 +480,100 @@ document.getElementById('saveProdBtn').onclick = async () => {
   msg.textContent = 'Kaydedildi ✓'; msg.className='msg ok';
   resetProdForm();
   loadProducts();
+};
+
+// ---------- VİDEOLAR ----------
+async function loadVideos(){
+  const { data } = await sb.from('suad_videos').select('*').order('sort_order');
+  const list = document.getElementById('videoList');
+  list.innerHTML = '';
+  (data||[]).forEach(v => {
+    const thumb = publicImageUrl(v.thumbnail_url);
+    const item = document.createElement('div');
+    item.className = 'row-item';
+    item.innerHTML =
+      (thumb ? '<img class="thumb" src="'+thumb+'">' : '<div class="thumb"></div>') +
+      '<div class="info"><div class="t">'+escapeHtml(v.title || 'İsimsiz video')+'</div><div class="s">'+escapeHtml(v.video_url)+'</div></div>' +
+      '<div class="acts"><button data-act="del" class="danger">Sil</button></div>';
+    item.querySelector('[data-act=del]').onclick = async () => {
+      if (!confirm('Bu videoyu silmek istediğine emin misin?')) return;
+      await sb.from('suad_videos').delete().eq('id', v.id);
+      loadVideos();
+    };
+    list.appendChild(item);
+  });
+}
+document.getElementById('saveVideoBtn').onclick = async () => {
+  const msg = document.getElementById('videoMsg');
+  const title = document.getElementById('videoTitle').value.trim();
+  const file = document.getElementById('videoFile').files[0];
+  if (!file) { msg.textContent = 'Video dosyası seçmelisin'; msg.className='msg err'; return; }
+  msg.textContent = 'Yükleniyor… (büyük dosyalarda biraz sürebilir)'; msg.className='msg';
+
+  const path = 'videos/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g,'');
+  const { error: upErr } = await sb.storage.from('suad-videos').upload(path, file);
+  if (upErr) { msg.textContent = 'Video yüklenemedi: ' + upErr.message; msg.className='msg err'; return; }
+
+  let thumbnail_url = undefined;
+  const thumbFile = document.getElementById('videoThumb').files[0];
+  if (thumbFile) {
+    const tpath = 'video-thumbs/' + Date.now() + '.' + thumbFile.name.split('.').pop();
+    const { error: tErr } = await sb.storage.from('suad-images').upload(tpath, thumbFile, { upsert: true });
+    if (!tErr) thumbnail_url = tpath;
+  }
+
+  const payload = { title, video_url: path };
+  if (thumbnail_url) payload.thumbnail_url = thumbnail_url;
+
+  const { error } = await sb.from('suad_videos').insert(payload);
+  if (error) { msg.textContent = 'Hata: ' + error.message; msg.className='msg err'; return; }
+  msg.textContent = 'Kaydedildi ✓'; msg.className='msg ok';
+  document.getElementById('videoTitle').value = '';
+  document.getElementById('videoFile').value = '';
+  document.getElementById('videoThumb').value = '';
+  loadVideos();
+};
+
+// ---------- ATÖLYE FOTOĞRAFLARI ----------
+async function loadWorkshopPhotos(){
+  const { data } = await sb.from('suad_workshop_photos').select('*').order('sort_order');
+  const list = document.getElementById('workshopList');
+  list.innerHTML = '';
+  (data||[]).forEach(p => {
+    const img = publicImageUrl(p.image_url);
+    const item = document.createElement('div');
+    item.className = 'row-item';
+    item.innerHTML =
+      (img ? '<img class="thumb" src="'+img+'">' : '<div class="thumb"></div>') +
+      '<div class="info"><div class="t">'+escapeHtml(p.caption || 'Başlıksız')+'</div></div>' +
+      '<div class="acts"><button data-act="del" class="danger">Sil</button></div>';
+    item.querySelector('[data-act=del]').onclick = async () => {
+      if (!confirm('Bu fotoğrafı silmek istediğine emin misin?')) return;
+      await sb.from('suad_workshop_photos').delete().eq('id', p.id);
+      loadWorkshopPhotos();
+    };
+    list.appendChild(item);
+  });
+}
+document.getElementById('saveWorkshopBtn').onclick = async () => {
+  const msg = document.getElementById('workshopMsg');
+  const file = document.getElementById('workshopImage').files[0];
+  if (!file) { msg.textContent = 'Görsel seçmelisin'; msg.className='msg err'; return; }
+  msg.textContent = 'Yükleniyor…'; msg.className='msg';
+
+  const path = 'workshop/' + Date.now() + '.' + file.name.split('.').pop();
+  const { error: upErr } = await sb.storage.from('suad-images').upload(path, file);
+  if (upErr) { msg.textContent = 'Görsel yüklenemedi: ' + upErr.message; msg.className='msg err'; return; }
+
+  const { error } = await sb.from('suad_workshop_photos').insert({
+    image_url: path,
+    caption: document.getElementById('workshopCaption').value.trim()
+  });
+  if (error) { msg.textContent = 'Hata: ' + error.message; msg.className='msg err'; return; }
+  msg.textContent = 'Kaydedildi ✓'; msg.className='msg ok';
+  document.getElementById('workshopImage').value = '';
+  document.getElementById('workshopCaption').value = '';
+  loadWorkshopPhotos();
 };
 
 checkSession();
